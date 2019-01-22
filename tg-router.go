@@ -9,6 +9,7 @@ import (
 )
 
 type routeCallback func(update tgbotapi.Update)
+type timerCallback func(t time.Time)
 
 type route struct {
 	comand       string
@@ -16,6 +17,18 @@ type route struct {
 	containText  string
 	pregTemplate string
 	callback     routeCallback
+}
+
+type routeTimer struct {
+	duration time.Duration
+	callback timerCallback
+}
+
+func (rt *routeTimer) Run() {
+	t := time.NewTicker(rt.duration)
+	for {
+		rt.callback(<-t.C)
+	}
 }
 
 func (r *route) check(update tgbotapi.Update, callback chan routeCallback) {
@@ -50,8 +63,9 @@ func (r *route) check(update tgbotapi.Update, callback chan routeCallback) {
 
 // RouteGroup - группа роутов
 type RouteGroup struct {
-	routes   []route
-	callback chan routeCallback
+	routes      []route
+	routeTimers []routeTimer
+	callback    chan routeCallback
 }
 
 // AddQueryRoute - роутер для Callback запросов
@@ -74,6 +88,11 @@ func (rg *RouteGroup) AddPregRoute(pregTemplate string, callback routeCallback) 
 	rg.routes = append(rg.routes, route{pregTemplate: pregTemplate, callback: callback})
 }
 
+// AddTimer - таймер
+func (rg *RouteGroup) AddTimer(duration time.Duration, callback timerCallback) {
+	rg.routeTimers = append(rg.routeTimers, routeTimer{duration: duration, callback: callback})
+}
+
 // Run - запуск роутера
 func (rg *RouteGroup) Run(update tgbotapi.Update) {
 	rg.callback = make(chan routeCallback)
@@ -90,6 +109,13 @@ func (rg *RouteGroup) Run(update tgbotapi.Update) {
 		case <-time.NewTicker(time.Second).C:
 		}
 	}(rg)
+}
+
+// RunTimer - запуск таймеров
+func (rg *RouteGroup) RunTimer() {
+	for _, rTimer := range rg.routeTimers {
+		go rTimer.Run()
+	}
 }
 
 // NewRouteGroup - создает новую группу роутов
