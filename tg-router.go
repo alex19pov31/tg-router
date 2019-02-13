@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alex19pov31/croner"
 	"github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
@@ -28,6 +29,21 @@ func (rt *routeTimer) Run() {
 	t := time.NewTicker(rt.duration)
 	for {
 		rt.callback(<-t.C)
+	}
+}
+
+type routeCronTimer struct {
+	*croner.CronTimer
+	callback timerCallback
+}
+
+func (rct *routeCronTimer) Run() {
+	t := time.NewTicker(time.Minute)
+	for {
+		tm := <-t.C
+		if rct.Check(tm) {
+			rct.callback(tm)
+		}
 	}
 }
 
@@ -61,10 +77,15 @@ func (r *route) check(update tgbotapi.Update, callback chan routeCallback) {
 	}
 }
 
+// ITimerRoute timer interface
+type ITimerRoute interface {
+	Run()
+}
+
 // RouteGroup - группа роутов
 type RouteGroup struct {
 	routes      []route
-	routeTimers []routeTimer
+	routeTimers []ITimerRoute
 	callback    chan routeCallback
 }
 
@@ -90,7 +111,12 @@ func (rg *RouteGroup) AddPregRoute(pregTemplate string, callback routeCallback) 
 
 // AddTimer - таймер
 func (rg *RouteGroup) AddTimer(duration time.Duration, callback timerCallback) {
-	rg.routeTimers = append(rg.routeTimers, routeTimer{duration: duration, callback: callback})
+	rg.routeTimers = append(rg.routeTimers, &routeTimer{duration: duration, callback: callback})
+}
+
+// AddCronTimer - таймер с правилом запуска
+func (rg *RouteGroup) AddCronTimer(cronRecord string, callback timerCallback) {
+	rg.routeTimers = append(rg.routeTimers, &routeCronTimer{CronTimer: croner.NewCronTimer(cronRecord), callback: callback})
 }
 
 // Run - запуск роутера
